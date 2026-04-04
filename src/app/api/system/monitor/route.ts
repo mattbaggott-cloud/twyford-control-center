@@ -5,12 +5,9 @@ import os from "os";
 
 const execAsync = promisify(exec);
 
-// Services monitored per backend
-const SYSTEMD_SERVICES = ["mission-control"];
-const PM2_SERVICES = ["classvault", "content-vault", "postiz-simple", "brain"];
-// creatoros not deployed yet — shown as "not_deployed"
-const PLACEHOLDER_SERVICES = [
-  { name: "creatoros", description: "Creatoros Platform", status: "not_deployed" },
+// Services to check (process-based, no systemd dependency)
+const MONITORED_SERVICES = [
+  { name: "openclaw", description: "OpenClaw Gateway", processName: "openclaw" },
 ];
 
 interface ServiceEntry {
@@ -39,34 +36,6 @@ interface FirewallRule {
   comment: string;
 }
 
-// Normalize PM2 status to a common set
-function normalizePm2Status(status: string): string {
-  switch (status) {
-    case "online":
-      return "active";
-    case "stopped":
-    case "stopping":
-      return "inactive";
-    case "errored":
-    case "error":
-      return "failed";
-    case "launching":
-    case "waiting restart":
-      return "activating";
-    default:
-      return status;
-  }
-}
-
-// Friendly display names for PM2 process names
-const SERVICE_DESCRIPTIONS: Record<string, string> = {
-  "mission-control": "Twyford Holdings Control Center",
-  classvault: "ClassVault – LMS Platform",
-  "content-vault": "Content Vault – Draft Management Webapp",
-  "postiz-simple": "Postiz – Social Media Scheduler",
-  brain: "Brain – Internal Tools",
-  creatoros: "Creatoros Platform",
-};
 
 export async function GET() {
   try {
@@ -80,147 +49,72 @@ export async function GET() {
     const freeMem = os.freemem();
     const usedMem = totalMem - freeMem;
 
-    // ── Disk ─────────────────────────────────────────────────────────────────
+    // ── Disk (macOS-compatible: df -k) ────────────────────────────────────────
     let diskTotal = 100;
     let diskUsed = 0;
     let diskFree = 100;
     try {
-      const { stdout } = await execAsync("df -BG / | tail -1");
+      const { stdout } = await execAsync("df -k / | tail -1");
       const parts = stdout.trim().split(/\s+/);
-      diskTotal = parseInt(parts[1].replace("G", ""));
-      diskUsed = parseInt(parts[2].replace("G", ""));
-      diskFree = parseInt(parts[3].replace("G", ""));
+      const totalKB = parseInt(parts[1]);
+      const usedKB = parseInt(parts[2]);
+      const freeKB = parseInt(parts[3]);
+      diskTotal = Math.round(totalKB / 1024 / 1024); // GB
+      diskUsed = Math.round(usedKB / 1024 / 1024);
+      diskFree = Math.round(freeKB / 1024 / 1024);
     } catch (error) {
       console.error("Failed to get disk stats:", error);
     }
-    const diskPercent = (diskUsed / diskTotal) * 100;
+    const diskPercent = diskTotal > 0 ? (diskUsed / diskTotal) * 100 : 0;
 
-    // ── Network (real stats from /proc/net/dev) ───────────────────────────────
+    // ── Network (macOS-compatible: netstat -ib) ────────────────────────────────
     let network = { rx: 0, tx: 0 };
     try {
-      const { readFileSync } = await import('fs');
-      
-      function readNetStats(): { rx: number; tx: number; ts: number } {
-        const netDev = readFileSync('/proc/net/dev', 'utf-8');
-        const lines = netDev.trim().split('\n').slice(2);
-        let rx = 0, tx = 0;
-        for (const line of lines) {
-          const parts = line.trim().split(/\s+/);
-          const iface = parts[0].replace(':', '');
-          if (iface === 'lo') continue;
-          rx += parseInt(parts[1]) || 0;
-          tx += parseInt(parts[9]) || 0;
+      const { stdout: netOut } = await execAsync("netstat -ib 2>/dev/null | grep -E '^en[0-9]' | head -1");
+      if (netOut.trim()) {
+        const parts = netOut.trim().split(/\s+/);
+        // netstat -ib columns: Name Mtu Network Address Ipkts Ierrs Ibytes Opkts Oerrs Obytes Coll
+        const rxBytes = parseInt(parts[6]) || 0;
+        const txBytes = parseInt(parts[9]) || 0;
+        const now = Date.now();
+
+        if ((global as Record<string, unknown>).__netPrev) {
+          const prev = (global as Record<string, unknown>).__netPrev as { rx: number; tx: number; ts: number };
+          const dtSec = (now - prev.ts) / 1000;
+          if (dtSec > 0) {
+            network = {
+              rx: parseFloat(Math.max(0, (rxBytes - prev.rx) / 1024 / 1024 / dtSec).toFixed(3)),
+              tx: parseFloat(Math.max(0, (txBytes - prev.tx) / 1024 / 1024 / dtSec).toFixed(3)),
+            };
+          }
         }
-        return { rx, tx, ts: Date.now() };
+        (global as Record<string, unknown>).__netPrev = { rx: rxBytes, tx: txBytes, ts: now };
       }
-      
-      const current = readNetStats();
-      
-      // Use module-level cache for previous reading
-      if ((global as Record<string, unknown>).__netPrev) {
-        const prev = (global as Record<string, unknown>).__netPrev as { rx: number; tx: number; ts: number };
-        const dtSec = (current.ts - prev.ts) / 1000;
-        if (dtSec > 0) {
-          network = {
-            rx: parseFloat(Math.max(0, (current.rx - prev.rx) / 1024 / 1024 / dtSec).toFixed(3)),
-            tx: parseFloat(Math.max(0, (current.tx - prev.tx) / 1024 / 1024 / dtSec).toFixed(3)),
-          };
-        }
-      }
-      (global as Record<string, unknown>).__netPrev = current;
     } catch (error) {
       console.error("Failed to get network stats:", error);
     }
 
-    // ── Services ─────────────────────────────────────────────────────────────
+    // ── Services (process-based checks, no systemd) ─────────────────────────
     const services: ServiceEntry[] = [];
 
-    // 1. Systemd services
-    for (const name of SYSTEMD_SERVICES) {
+    for (const svc of MONITORED_SERVICES) {
       try {
-        const { stdout } = await execAsync(`systemctl is-active ${name} 2>/dev/null || true`);
-        const rawStatus = stdout.trim(); // "active" | "inactive" | "failed" | ...
+        const { stdout } = await execAsync(`pgrep -f ${svc.processName} 2>/dev/null || true`);
+        const isRunning = stdout.trim().length > 0;
         services.push({
-          name,
-          status: rawStatus,
-          description: SERVICE_DESCRIPTIONS[name] ?? name,
-          backend: "systemd",
+          name: svc.name,
+          status: isRunning ? "active" : "inactive",
+          description: svc.description,
+          backend: "process",
         });
       } catch {
         services.push({
-          name,
+          name: svc.name,
           status: "unknown",
-          description: SERVICE_DESCRIPTIONS[name] ?? name,
-          backend: "systemd",
+          description: svc.description,
+          backend: "process",
         });
       }
-    }
-
-    // 2. PM2 services — single call, parse JSON
-    try {
-      const { stdout: pm2Json } = await execAsync("pm2 jlist 2>/dev/null");
-      const pm2List = JSON.parse(pm2Json) as Array<{
-        name: string;
-        pid: number | null;
-        pm2_env: {
-          status: string;
-          pm_uptime?: number;
-          restart_time?: number;
-          monit?: { cpu: number; memory: number };
-        };
-      }>;
-
-      const pm2Map: Record<string, (typeof pm2List)[0]> = {};
-      for (const proc of pm2List) {
-        pm2Map[proc.name] = proc;
-      }
-
-      for (const name of PM2_SERVICES) {
-        const proc = pm2Map[name];
-        if (!proc) {
-          services.push({
-            name,
-            status: "unknown",
-            description: SERVICE_DESCRIPTIONS[name] ?? name,
-            backend: "pm2",
-          });
-          continue;
-        }
-
-        const rawStatus = proc.pm2_env?.status ?? "unknown";
-        const uptime =
-          rawStatus === "online" && proc.pm2_env?.pm_uptime
-            ? Date.now() - proc.pm2_env.pm_uptime
-            : null;
-
-        services.push({
-          name,
-          status: normalizePm2Status(rawStatus),
-          description: SERVICE_DESCRIPTIONS[name] ?? name,
-          backend: "pm2",
-          uptime,
-          restarts: proc.pm2_env?.restart_time ?? 0,
-          pid: proc.pid,
-          cpu: proc.pm2_env?.monit?.cpu ?? null,
-          mem: proc.pm2_env?.monit?.memory ?? null,
-        });
-      }
-    } catch (err) {
-      console.error("Failed to query PM2:", err);
-      // Fallback: mark all PM2 services as unknown
-      for (const name of PM2_SERVICES) {
-        services.push({
-          name,
-          status: "unknown",
-          description: SERVICE_DESCRIPTIONS[name] ?? name,
-          backend: "pm2",
-        });
-      }
-    }
-
-    // 3. Placeholder services (not yet deployed)
-    for (const svc of PLACEHOLDER_SERVICES) {
-      services.push({ ...svc, backend: "none" });
     }
 
     // ── Tailscale VPN ─────────────────────────────────────────────────────────
@@ -252,35 +146,12 @@ export async function GET() {
       console.error("Failed to get Tailscale status:", error);
     }
 
-    // ── Firewall (UFW) ────────────────────────────────────────────────────────
-    let firewallActive = false;
-    const firewallRulesList: FirewallRule[] = [];
+    // ── Firewall (macOS — assume active, no ufw) ──────────────────────────────
+    const firewallActive = true;
     const staticFirewallRules: FirewallRule[] = [
-      { port: "80/tcp", action: "ALLOW", from: "Anywhere", comment: "Public HTTP" },
-      { port: "443/tcp", action: "ALLOW", from: "Anywhere", comment: "Public HTTPS" },
-      { port: "3000", action: "ALLOW", from: "Tailscale (100.64.0.0/10)", comment: "Twyford Holdings Control Center via Tailscale" },
-      { port: "22", action: "ALLOW", from: "Tailscale (100.64.0.0/10)", comment: "SSH via Tailscale only" },
+      { port: "443/tcp", action: "ALLOW", from: "Anywhere", comment: "HTTPS" },
+      { port: "3000", action: "ALLOW", from: "Tailscale", comment: "Dashboard via Tailscale" },
     ];
-    try {
-      const { stdout: ufwStatus } = await execAsync("ufw status numbered 2>/dev/null || true");
-      if (ufwStatus.includes("Status: active")) {
-        firewallActive = true;
-        const lines = ufwStatus.split("\n");
-        for (const line of lines) {
-          const match = line.match(/\[\s*\d+\]\s+([\w/:]+)\s+(\w+)\s+(\S+)\s*(#?.*)$/);
-          if (match) {
-            firewallRulesList.push({
-              port: match[1].trim(),
-              action: match[2].trim(),
-              from: match[3].trim(),
-              comment: match[4].replace("#", "").trim(),
-            });
-          }
-        }
-      }
-    } catch (error) {
-      console.error("Failed to get firewall status:", error);
-    }
 
     return NextResponse.json({
       cpu: {
@@ -315,8 +186,8 @@ export async function GET() {
               ],
       },
       firewall: {
-        active: firewallActive || true,
-        rules: firewallRulesList.length > 0 ? firewallRulesList : staticFirewallRules,
+        active: firewallActive,
+        rules: staticFirewallRules,
         ruleCount: staticFirewallRules.length,
       },
       timestamp: new Date().toISOString(),

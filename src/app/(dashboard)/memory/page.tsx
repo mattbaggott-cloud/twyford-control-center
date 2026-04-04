@@ -63,12 +63,21 @@ export default function MemoryPage() {
       const res = await fetch(
         `/api/files?workspace=${encodeURIComponent(workspace)}&path=${encodeURIComponent(path)}`
       );
-      if (!res.ok) throw new Error("Failed to load file");
+      if (!res.ok) {
+        // Graceful handling — show message instead of crashing
+        const errorText = res.status === 404 ? "File not found" : `Failed to load file (${res.status})`;
+        setError(errorText);
+        setContent("");
+        setOriginalContent("");
+        return;
+      }
       const data = await res.json();
-      setContent(data.content);
-      setOriginalContent(data.content);
+      setContent(data.content || "");
+      setOriginalContent(data.content || "");
     } catch (err) {
-      setError("Failed to load file");
+      setError("Failed to load file — it may not exist or the API is unreachable");
+      setContent("");
+      setOriginalContent("");
       console.error(err);
     }
   }, []);
@@ -395,7 +404,25 @@ export default function MemoryPage() {
                     overflow: "hidden",
                   }}
                 >
-                  {selectedPath ? (
+                  {error && selectedPath ? (
+                    <div
+                      style={{
+                        flex: 1,
+                        display: "flex",
+                        alignItems: "center",
+                        justifyContent: "center",
+                        color: "var(--text-muted)",
+                        padding: "24px",
+                      }}
+                    >
+                      <div style={{ textAlign: "center" }}>
+                        <p style={{ fontSize: "14px", color: "var(--negative, #f87171)" }}>{error}</p>
+                        <p style={{ fontSize: "12px", marginTop: "8px", color: "var(--text-muted)" }}>
+                          Select another file or refresh.
+                        </p>
+                      </div>
+                    </div>
+                  ) : selectedPath ? (
                     <div style={{ flex: 1, minHeight: 0, overflow: "auto" }}>
                       {viewMode === "edit" ? (
                         <MarkdownEditor

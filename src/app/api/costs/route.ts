@@ -9,8 +9,24 @@ import {
   getHourlyCost,
 } from "@/lib/usage-queries";
 import path from "path";
+import fs from "fs";
 
-const DB_PATH = path.join(process.cwd(), "data", "usage-tracking.db");
+// Look for the usage DB under OPENCLAW_DIR, fallback to project data dir
+function getDbPath(): string {
+  const openclawDir = process.env.OPENCLAW_DIR || path.join(process.env.HOME || "/root", ".openclaw");
+  // Check common locations
+  const candidates = [
+    path.join(openclawDir, "data", "usage-tracking.db"),
+    path.join(openclawDir, "usage-tracking.db"),
+    path.join(process.cwd(), "data", "usage-tracking.db"),
+  ];
+  for (const p of candidates) {
+    if (fs.existsSync(p)) return p;
+  }
+  return candidates[0]; // default (getDatabase will handle missing)
+}
+
+const DB_PATH = getDbPath();
 const DEFAULT_BUDGET = 100.0; // Default budget in USD
 
 export async function GET(request: NextRequest) {
@@ -21,10 +37,16 @@ export async function GET(request: NextRequest) {
   const days = parseInt(timeframe.replace(/\D/g, ""), 10) || 30;
 
   try {
-    const db = getDatabase(DB_PATH);
+    let db;
+    try {
+      db = getDatabase(DB_PATH);
+    } catch (dbErr) {
+      console.warn("Could not open usage DB:", dbErr);
+      db = null;
+    }
 
     if (!db) {
-      // Database doesn't exist yet - return zeros
+      // Database doesn't exist yet - return zeros gracefully
       return NextResponse.json({
         today: 0,
         yesterday: 0,
@@ -36,7 +58,7 @@ export async function GET(request: NextRequest) {
         byModel: [],
         daily: [],
         hourly: [],
-        message: "No usage data collected yet. Run collect-usage script first.",
+        message: "No usage data collected yet.",
       });
     }
 
@@ -59,10 +81,20 @@ export async function GET(request: NextRequest) {
     });
   } catch (error) {
     console.error("Error fetching cost data:", error);
-    return NextResponse.json(
-      { error: "Failed to fetch cost data" },
-      { status: 500 }
-    );
+    // Graceful degradation — return empty data instead of 500
+    return NextResponse.json({
+      today: 0,
+      yesterday: 0,
+      thisMonth: 0,
+      lastMonth: 0,
+      projected: 0,
+      budget: DEFAULT_BUDGET,
+      byAgent: [],
+      byModel: [],
+      daily: [],
+      hourly: [],
+      message: "Failed to fetch cost data. DB may not exist yet.",
+    });
   }
 }
 

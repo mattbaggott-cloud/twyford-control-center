@@ -4,50 +4,9 @@ import { join } from "path";
 
 export const dynamic = "force-dynamic";
 
-const AGENT_CONFIG = {
-  main: { emoji: "🦞", color: "#ff6b35", name: "Twyfordas", role: "Boss" },
-  academic: {
-    emoji: "🎓",
-    color: "#4ade80",
-    name: "Profe",
-    role: "Teacher",
-  },
-  infra: {
-    emoji: "🔧",
-    color: "#f97316",
-    name: "Infra",
-    role: "DevOps",
-  },
-  studio: {
-    emoji: "🎬",
-    color: "#a855f7",
-    name: "Studio",
-    role: "Video Editor",
-  },
-  social: {
-    emoji: "📱",
-    color: "#ec4899",
-    name: "Social",
-    role: "Social Media",
-  },
-  linkedin: {
-    emoji: "💼",
-    color: "#0077b5",
-    name: "LinkedIn Pro",
-    role: "Professional",
-  },
-  devclaw: {
-    emoji: "👨‍💻",
-    color: "#8b5cf6",
-    name: "DevClaw",
-    role: "Developer",
-  },
-  freelance: {
-    emoji: "👨‍💻",
-    color: "#8b5cf6",
-    name: "DevClaw",
-    role: "Developer",
-  },
+const AGENT_CONFIG: Record<string, { emoji: string; color: string; name: string; role: string }> = {
+  main: { emoji: "🦞", color: "#3fb950", name: "Woods", role: "Chief of Staff" },
+  ford: { emoji: "👨🏻‍💻", color: "#FF3B30", name: "Ford", role: "Full Stack Engineer" },
 };
 
 interface AgentSession {
@@ -203,11 +162,8 @@ export async function GET() {
         status = getAgentStatusFromFiles(agent.id, agent.workspace);
       }
 
-      // Map freelance -> devclaw for canvas compatibility
-      const canvasId = agent.id === "freelance" ? "devclaw" : agent.id;
-
       return {
-        id: canvasId,
+        id: agent.id,
         name: agentInfo.name,
         emoji: agentInfo.emoji,
         color: agentInfo.color,
