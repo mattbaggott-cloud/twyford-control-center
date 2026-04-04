@@ -57,7 +57,7 @@ export function TopBar() {
               letterSpacing: "-0.5px",
             }}
           >
-            TenacitOS
+            Twyford Control Center
           </h1>
           {/* Version Badge */}
           <div
