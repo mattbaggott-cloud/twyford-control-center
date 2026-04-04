@@ -12,6 +12,7 @@ interface Agent {
   model: string;
   workspace: string;
   dmPolicy?: string;
+  role?: string;
   allowAgents?: string[];
   allowAgentsDetails?: Array<{
     id: string;
@@ -28,11 +29,18 @@ interface Agent {
 // Fallback config used when an agent doesn't define its own ui config in openclaw.json.
 // The main agent reads name/emoji from env vars; all others fall back to generic defaults.
 // Override via each agent's openclaw.json → ui.emoji / ui.color / name fields.
-const DEFAULT_AGENT_CONFIG: Record<string, { emoji: string; color: string; name?: string }> = {
+const DEFAULT_AGENT_CONFIG: Record<string, { emoji: string; color: string; name?: string; role?: string }> = {
   main: {
-    emoji: process.env.NEXT_PUBLIC_AGENT_EMOJI || "🤖",
-    color: "#ff6b35",
-    name: process.env.NEXT_PUBLIC_AGENT_NAME || "Twyford Control Center",
+    emoji: process.env.NEXT_PUBLIC_AGENT_EMOJI || "🦞",
+    color: "#3fb950",
+    name: process.env.NEXT_PUBLIC_AGENT_NAME || "Woods",
+    role: "Chief of Staff",
+  },
+  ford: {
+    emoji: "👨🏻‍💻",
+    color: "#FF3B30",
+    name: "Andrew",
+    role: "Full Stack Engineer — Twyford Control Center",
   },
 };
 
@@ -64,10 +72,11 @@ export async function GET() {
     // Get agents from config
     // config.agents.list may not exist (e.g. OpenClaw configs with only agents.defaults)
     // In that case, synthesize a single "main" agent from defaults + env vars
-    let agents: Agent[];
+    let agents: Agent[] = [];
 
     if (config.agents?.list && Array.isArray(config.agents.list)) {
       agents = config.agents.list.map((agent: any) => {
+        const agentDefaults = DEFAULT_AGENT_CONFIG[agent.id];
         const agentInfo = getAgentDisplayInfo(agent.id, agent);
 
         // Get telegram account info
@@ -128,6 +137,7 @@ export async function GET() {
           model:
             agent.model?.primary || config.agents.defaults?.model?.primary,
           workspace: agent.workspace,
+          role: agentDefaults?.role,
           dmPolicy:
             telegramAccount?.dmPolicy ||
             config.channels?.telegram?.dmPolicy ||
@@ -140,23 +150,27 @@ export async function GET() {
           activeSessions: 0, // TODO: get from sessions API
         };
       });
-    } else {
-      // No agents.list — construct a single main agent from defaults + env vars
-      const defaults = config.agents?.defaults || {};
-      agents = [
-        {
-          id: "main",
-          name: process.env.NEXT_PUBLIC_AGENT_NAME || "Woods",
-          emoji: process.env.NEXT_PUBLIC_AGENT_EMOJI || "🦞",
-          color: "#ff6b35",
-          model: defaults.model?.primary || "unknown",
-          workspace: defaults.workspace || "",
-          status: "online",
-          activeSessions: 0,
-          allowAgents: [],
-          allowAgentsDetails: [],
-        },
-      ];
+
+      // Always prepend the main Woods agent since it's not in agents.list
+      const mainAgent: Agent = {
+        id: "main",
+        name: DEFAULT_AGENT_CONFIG.main.name!,
+        emoji: DEFAULT_AGENT_CONFIG.main.emoji,
+        color: DEFAULT_AGENT_CONFIG.main.color,
+        role: DEFAULT_AGENT_CONFIG.main.role,
+        model: config.agents?.defaults?.model?.primary || "claude-sonnet-4-6",
+        workspace: config.agents?.defaults?.workspace || "",
+        status: "online",
+        activeSessions: 0,
+        allowAgents: ["ford"],
+        allowAgentsDetails: [{
+          id: "ford",
+          name: "Andrew",
+          emoji: "👨🏻‍💻",
+          color: "#FF3B30",
+        }],
+      };
+      agents = [mainAgent, ...agents];
     }
 
     return NextResponse.json({ agents });
