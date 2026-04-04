@@ -1,6 +1,6 @@
 "use client";
 
-import { Dock, TopBar, StatusBar } from "@/components/Twyford Control Center";
+import { Dock, TopBar, StatusBar } from "@/components/TenacitOS";
 
 export default function DashboardLayout({
   children,

@@ -11,7 +11,7 @@ import {
   FileText,
   X,
 } from "lucide-react";
-import { SectionHeader, MetricCard } from "@/components/Twyford Control Center";
+import { SectionHeader, MetricCard } from "@/components/TenacitOS";
 
 interface Skill {
   id: string;
