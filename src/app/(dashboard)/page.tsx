@@ -74,10 +74,10 @@ export default function DashboardPage() {
             letterSpacing: '-1.5px'
           }}
         >
-          🦞 Mission Control
+          🦞 Twyford Holdings Control Center
         </h1>
         <p style={{ color: 'var(--text-secondary)', fontSize: '14px' }}>
-          Overview of Twyfordas agent activity
+          Overview of Twyford Holdings agent activity
         </p>
       </div>
 
