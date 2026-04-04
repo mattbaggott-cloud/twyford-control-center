@@ -39,7 +39,7 @@ const DEFAULT_AGENT_CONFIG: Record<string, { emoji: string; color: string; name?
   ford: {
     emoji: "👨🏻‍💻",
     color: "#FF3B30",
-    name: "Andrew",
+    name: "Ford",
     role: "Full Stack Engineer — Twyford Control Center",
   },
 };
@@ -165,7 +165,7 @@ export async function GET() {
         allowAgents: ["ford"],
         allowAgentsDetails: [{
           id: "ford",
-          name: "Andrew",
+          name: "Ford",
           emoji: "👨🏻‍💻",
           color: "#FF3B30",
         }],
@@ -173,7 +173,14 @@ export async function GET() {
       agents = [mainAgent, ...agents];
     }
 
-    return NextResponse.json({ agents });
+    // Deduplicate by id — mainAgent takes priority
+    const seen = new Set<string>();
+    const deduped = agents.filter(a => {
+      if (seen.has(a.id)) return false;
+      seen.add(a.id);
+      return true;
+    });
+    return NextResponse.json({ agents: deduped });
   } catch (error) {
     console.error("Error reading agents:", error);
     return NextResponse.json(
