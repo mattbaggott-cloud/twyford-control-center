@@ -62,79 +62,100 @@ export async function GET() {
     const config = JSON.parse(readFileSync(configPath, "utf-8"));
 
     // Get agents from config
-    const agents: Agent[] = config.agents.list.map((agent: any) => {
-      const agentInfo = getAgentDisplayInfo(agent.id, agent);
+    // config.agents.list may not exist (e.g. OpenClaw configs with only agents.defaults)
+    // In that case, synthesize a single "main" agent from defaults + env vars
+    let agents: Agent[];
 
-      // Get telegram account info
-      const telegramAccount =
-        config.channels?.telegram?.accounts?.[agent.id];
-      const botToken = telegramAccount?.botToken;
+    if (config.agents?.list && Array.isArray(config.agents.list)) {
+      agents = config.agents.list.map((agent: any) => {
+        const agentInfo = getAgentDisplayInfo(agent.id, agent);
 
-      // Check if agent has recent activity
-      const memoryPath = join(agent.workspace, "memory");
-      let lastActivity = undefined;
-      let status: "online" | "offline" = "offline";
+        // Get telegram account info
+        const telegramAccount =
+          config.channels?.telegram?.accounts?.[agent.id];
+        const botToken = telegramAccount?.botToken;
 
-      try {
-        const today = new Date().toISOString().split("T")[0];
-        const memoryFile = join(memoryPath, `${today}.md`);
-        const stat = require("fs").statSync(memoryFile);
-        lastActivity = stat.mtime.toISOString();
-        // Consider online if activity within last 5 minutes
-        status =
-          Date.now() - stat.mtime.getTime() < 5 * 60 * 1000
-            ? "online"
-            : "offline";
-      } catch (e) {
-        // No recent activity
-      }
+        // Check if agent has recent activity
+        const memoryPath = join(agent.workspace, "memory");
+        let lastActivity = undefined;
+        let status: "online" | "offline" = "offline";
 
-      // Get details of allowed subagents
-      const allowAgents = agent.subagents?.allowAgents || [];
-      const allowAgentsDetails = allowAgents.map((subagentId: string) => {
-        // Find subagent in config
-        const subagentConfig = config.agents.list.find(
-          (a: any) => a.id === subagentId
-        );
-        if (subagentConfig) {
-          const subagentInfo = getAgentDisplayInfo(subagentId, subagentConfig);
+        try {
+          const today = new Date().toISOString().split("T")[0];
+          const memoryFile = join(memoryPath, `${today}.md`);
+          const stat = require("fs").statSync(memoryFile);
+          lastActivity = stat.mtime.toISOString();
+          // Consider online if activity within last 5 minutes
+          status =
+            Date.now() - stat.mtime.getTime() < 5 * 60 * 1000
+              ? "online"
+              : "offline";
+        } catch (e) {
+          // No recent activity
+        }
+
+        // Get details of allowed subagents
+        const allowAgents = agent.subagents?.allowAgents || [];
+        const allowAgentsDetails = allowAgents.map((subagentId: string) => {
+          // Find subagent in config
+          const subagentConfig = config.agents.list.find(
+            (a: any) => a.id === subagentId
+          );
+          if (subagentConfig) {
+            const subagentInfo = getAgentDisplayInfo(subagentId, subagentConfig);
+            return {
+              id: subagentId,
+              name: subagentConfig.name || subagentInfo.name,
+              emoji: subagentInfo.emoji,
+              color: subagentInfo.color,
+            };
+          }
+          // Fallback if subagent not found in config
+          const fallbackInfo = getAgentDisplayInfo(subagentId, null);
           return {
             id: subagentId,
-            name: subagentConfig.name || subagentInfo.name,
-            emoji: subagentInfo.emoji,
-            color: subagentInfo.color,
+            name: fallbackInfo.name,
+            emoji: fallbackInfo.emoji,
+            color: fallbackInfo.color,
           };
-        }
-        // Fallback if subagent not found in config
-        const fallbackInfo = getAgentDisplayInfo(subagentId, null);
+        });
+
         return {
-          id: subagentId,
-          name: fallbackInfo.name,
-          emoji: fallbackInfo.emoji,
-          color: fallbackInfo.color,
+          id: agent.id,
+          name: agent.name || agentInfo.name,
+          emoji: agentInfo.emoji,
+          color: agentInfo.color,
+          model:
+            agent.model?.primary || config.agents.defaults?.model?.primary,
+          workspace: agent.workspace,
+          dmPolicy:
+            telegramAccount?.dmPolicy ||
+            config.channels?.telegram?.dmPolicy ||
+            "pairing",
+          allowAgents,
+          allowAgentsDetails,
+          botToken: botToken ? "configured" : undefined,
+          status,
+          lastActivity,
+          activeSessions: 0, // TODO: get from sessions API
         };
       });
-
-      return {
-        id: agent.id,
-        name: agent.name || agentInfo.name,
-        emoji: agentInfo.emoji,
-        color: agentInfo.color,
-        model:
-          agent.model?.primary || config.agents.defaults.model.primary,
-        workspace: agent.workspace,
-        dmPolicy:
-          telegramAccount?.dmPolicy ||
-          config.channels?.telegram?.dmPolicy ||
-          "pairing",
-        allowAgents,
-        allowAgentsDetails,
-        botToken: botToken ? "configured" : undefined,
-        status,
-        lastActivity,
-        activeSessions: 0, // TODO: get from sessions API
-      };
-    });
+    } else {
+      // No agents.list — construct a single main agent from defaults + env vars
+      const defaults = config.agents?.defaults || {};
+      agents = [
+        {
+          id: "main",
+          name: process.env.NEXT_PUBLIC_AGENT_NAME || "Woods",
+          emoji: process.env.NEXT_PUBLIC_AGENT_EMOJI || "🦞",
+          color: "#ff6b35",
+          model: defaults.model?.primary || "unknown",
+          workspace: defaults.workspace || "",
+          status: "online",
+          activeSessions: 0,
+        },
+      ];
+    }
 
     return NextResponse.json({ agents });
   } catch (error) {
