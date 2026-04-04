@@ -153,6 +153,8 @@ export async function GET() {
           workspace: defaults.workspace || "",
           status: "online",
           activeSessions: 0,
+          allowAgents: [],
+          allowAgentsDetails: [],
         },
       ];
     }
