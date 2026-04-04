@@ -7,7 +7,7 @@
 
 export const BRANDING = {
   // Main agent name and emoji
-  agentName: process.env.NEXT_PUBLIC_AGENT_NAME || "Mission Control",
+  agentName: process.env.NEXT_PUBLIC_AGENT_NAME || "Twyford Control Center",
   agentEmoji: process.env.NEXT_PUBLIC_AGENT_EMOJI || "🦞",
 
   // About page — agent identity
@@ -28,7 +28,7 @@ export const BRANDING = {
   companyName: process.env.NEXT_PUBLIC_COMPANY_NAME || "MISSION CONTROL, INC.",
 
   // App title (shown in browser tab)
-  appTitle: process.env.NEXT_PUBLIC_APP_TITLE || "Mission Control",
+  appTitle: process.env.NEXT_PUBLIC_APP_TITLE || "Twyford Control Center",
 } as const;
 
 // Helper to get full agent display name

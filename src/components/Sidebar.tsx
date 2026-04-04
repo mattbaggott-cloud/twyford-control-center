@@ -208,7 +208,7 @@ export function Sidebar() {
               letterSpacing: "-0.5px",
             }}
           >
-            Mission Control
+            Twyford Holdings Control Center
           </h1>
         </div>
 

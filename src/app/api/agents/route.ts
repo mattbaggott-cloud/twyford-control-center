@@ -32,7 +32,7 @@ const DEFAULT_AGENT_CONFIG: Record<string, { emoji: string; color: string; name?
   main: {
     emoji: process.env.NEXT_PUBLIC_AGENT_EMOJI || "🤖",
     color: "#ff6b35",
-    name: process.env.NEXT_PUBLIC_AGENT_NAME || "Mission Control",
+    name: process.env.NEXT_PUBLIC_AGENT_NAME || "Twyford Control Center",
   },
 };
 
