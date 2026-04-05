@@ -29,7 +29,7 @@ export default function ChatPage() {
   >("connecting");
   const gatewayRef = useRef<GatewayWS | null>(null);
 
-  const handleSend = useCallback((text: string) => {
+  const handleSend = useCallback(async (text: string) => {
     // Add user message to UI immediately
     const userMsg: MessageBubbleProps = {
       role: "user",
@@ -40,7 +40,20 @@ export default function ChatPage() {
 
     // Send via WebSocket
     if (gatewayRef.current) {
-      gatewayRef.current.sendMessage(text);
+      try {
+        await gatewayRef.current.sendMessage(text);
+      } catch (err) {
+        console.error("[Chat] Failed to send message:", err);
+        // Add error indicator to UI
+        setMessages((prev) => [
+          ...prev,
+          {
+            role: "system" as const,
+            content: "Failed to send message. Check your connection.",
+            timestamp: new Date().toISOString(),
+          },
+        ]);
+      }
     }
   }, []);
 
