@@ -18,12 +18,12 @@ const AGENTS: { id: string; name: string; emoji: string; color: string; subtitle
   { id: "ford", name: "Ford", emoji: "👨🏻‍💻", color: "#FF3B30", subtitle: "Full Stack Engineer", sessionKey: "agent:ford:main" },
 ];
 
-function chatMessageToBubble(msg: ChatMessage): MessageBubbleProps {
+function chatMessageToBubble(msg: ChatMessage, fallbackAgent?: string): MessageBubbleProps {
   return {
     role: msg.role,
     content: msg.content,
     timestamp: msg.timestamp,
-    agent: msg.role === "assistant" ? (msg.agent || "Woods") : undefined,
+    agent: msg.role === "assistant" ? (msg.agent || fallbackAgent) : undefined,
   };
 }
 
@@ -156,7 +156,8 @@ export default function ChatPage() {
       if (gatewayRef.current) {
         try {
           const freshMessages = await gatewayRef.current.switchSession(sessionKey);
-          const bubbles = freshMessages.map(chatMessageToBubble);
+          const switchedAgentName = getAgentBySessionKey(sessionKey).name;
+          const bubbles = freshMessages.map((msg) => chatMessageToBubble(msg, switchedAgentName));
           setMessages(bubbles);
           messageCacheRef.current.set(sessionKey, bubbles);
         } catch (err) {
@@ -185,12 +186,14 @@ export default function ChatPage() {
         setConnectionStatus(status);
       },
       onHistory: (history) => {
-        const bubbles = history.map(chatMessageToBubble);
+        const agentName = getAgentBySessionKey(activeSessionRef.current).name;
+        const bubbles = history.map((msg) => chatMessageToBubble(msg, agentName));
         setMessages(bubbles);
         messageCacheRef.current.set(activeSessionRef.current, bubbles);
       },
       onMessage: (msg) => {
-        const bubble = chatMessageToBubble(msg);
+        const activeAgentName = getAgentBySessionKey(activeSessionRef.current).name;
+        const bubble = chatMessageToBubble(msg, activeAgentName);
         // If the message is for the active session, show it
         // Otherwise, increment unread count
         // Since gateway sends events for the current session context,

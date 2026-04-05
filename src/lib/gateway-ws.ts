@@ -261,10 +261,13 @@ export class GatewayWS {
     });
     return (Array.isArray(result?.messages) ? result.messages : [])
       .filter((m: any) => {
+        if (m.role === "system") return false;
         if (m.role !== "user" && m.role !== "assistant") return false;
         const text = this.extractText(m);
         if (!text || text.trim().length === 0) return false;
         if (/^\s*NO_REPLY\s*$/.test(text)) return false;
+        if (text.includes("<<<")) return false;
+        if (text.includes("OPENCLAW_INTERNAL") || text.includes("UNTRUSTED_CHILD")) return false;
         return true;
       })
       .map((m: any) => this.parseChatMessage(m));
