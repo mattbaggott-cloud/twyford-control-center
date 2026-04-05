@@ -144,14 +144,26 @@ export class GatewayWS {
     const state = payload.state;
 
     if (state === "delta") {
-      // Extract text from message
-      const text = this.extractText(payload.message);
-      if (text) {
-        this.options.onStream?.({ content: text, messageId: payload.runId || "" });
+      // Extract text from message, filter out thinking/reasoning content
+      const msg = payload.message;
+      if (msg && Array.isArray(msg.content)) {
+        // Only pass through text blocks, skip thinking/tool_use/etc.
+        const textParts = msg.content
+          .filter((c: any) => c.type === "text" && typeof c.text === "string")
+          .map((c: any) => c.text);
+        if (textParts.length > 0) {
+          this.options.onStream?.({ content: textParts.join(""), messageId: payload.runId || "" });
+        }
+      } else {
+        const text = this.extractText(msg);
+        if (text) {
+          this.options.onStream?.({ content: text, messageId: payload.runId || "" });
+        }
       }
     } else if (state === "final") {
       const msg = this.parseAssistantMessage(payload.message);
-      if (msg) {
+      // Ignore messages with no text content
+      if (msg && msg.content.trim().length > 0) {
         this.options.onMessage?.(msg);
       }
     } else if (state === "error") {
@@ -164,10 +176,11 @@ export class GatewayWS {
     if (typeof message.text === "string") return message.text;
     if (typeof message.content === "string") return message.content;
     if (Array.isArray(message.content)) {
-      return message.content
+      // ONLY extract text blocks, skip tool_use, tool_result, thinking, etc.
+      const textParts = message.content
         .filter((c: any) => c.type === "text" && typeof c.text === "string")
-        .map((c: any) => c.text)
-        .join("");
+        .map((c: any) => c.text);
+      return textParts.length > 0 ? textParts.join("\n") : null;
     }
     return null;
   }
@@ -223,8 +236,14 @@ export class GatewayWS {
       });
       const messages = (Array.isArray(result?.messages) ? result.messages : [])
         .filter((m: any) => {
+          // Only include user and assistant messages
+          if (m.role !== "user" && m.role !== "assistant") return false;
+          // Extract text content (filters out tool_use, thinking, etc.)
           const text = this.extractText(m);
-          return text && !/^\s*NO_REPLY\s*$/.test(text);
+          // Skip empty messages and NO_REPLY messages
+          if (!text || text.trim().length === 0) return false;
+          if (/^\s*NO_REPLY\s*$/.test(text)) return false;
+          return true;
         })
         .map((m: any) => this.parseChatMessage(m));
       this.options.onHistory?.(messages);

@@ -77,29 +77,30 @@ export default function ChatPage() {
       onMessage: (msg) => {
         const bubble = chatMessageToBubble(msg);
         setMessages((prev) => {
-          // Replace streaming bubble if one exists, otherwise append
+          // Replace streaming bubble entirely with the final clean content
           const streamIdx = prev.findIndex((m) => m.role === "assistant" && m.isStreaming);
           if (streamIdx >= 0) {
             const updated = [...prev];
             updated[streamIdx] = { ...bubble, isStreaming: false };
             return updated;
           }
-          return [...prev, bubble];
+          return [...prev, { ...bubble, isStreaming: false }];
         });
       },
       onStream: (chunk) => {
-        // Handle streaming: append to last assistant message or create new one
         setMessages((prev) => {
-          const last = prev[prev.length - 1];
+          const lastIdx = prev.length - 1;
+          const last = lastIdx >= 0 ? prev[lastIdx] : null;
           if (last && last.role === "assistant" && last.isStreaming) {
+            // Append to existing streaming bubble
             const updated = [...prev];
-            updated[updated.length - 1] = {
+            updated[lastIdx] = {
               ...last,
               content: last.content + chunk.content,
             };
             return updated;
           }
-          // New streaming message
+          // Start a fresh streaming bubble — don't carry over old content
           return [
             ...prev,
             {
