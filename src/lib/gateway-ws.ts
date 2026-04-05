@@ -194,7 +194,7 @@ export class GatewayWS {
         minProtocol: 3,
         maxProtocol: 3,
         client: {
-          id: "twyford-control-center",
+          id: "openclaw-control-ui",
           version: "1.0",
           platform: navigator?.platform || "web",
           mode: "webchat",
@@ -203,7 +203,7 @@ export class GatewayWS {
         scopes: ["operator.admin"],
         auth: { token: this.options.token },
         caps: ["tool-events"],
-        ...(nonce ? { nonce } : {}),
+
       });
 
       this.options.onStatus?.("connected");
@@ -250,6 +250,7 @@ export class GatewayWS {
         sessionKey: this.options.sessionKey || "main",
         message: text,
         deliver: false,
+        idempotencyKey: crypto.randomUUID(),
       });
     } catch (err) {
       console.error("[GatewayWS] send failed:", err);
