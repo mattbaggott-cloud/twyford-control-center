@@ -15,6 +15,7 @@
     "@react-three/rapier": "^2.2.0",
     "@tailwindcss/typography": "^0.5.19",
     "@types/better-sqlite3": "^7.6.13",
+    "@types/react-syntax-highlighter": "^15.5.13",
     "better-sqlite3": "^12.6.2",
     "date-fns": "^4.1.0",
     "lucide-react": "^0.563.0",
@@ -22,6 +23,7 @@
     "react": "19.2.3",
     "react-dom": "19.2.3",
     "react-markdown": "^10.1.0",
+    "react-syntax-highlighter": "^16.1.1",
     "recharts": "^2.15.4",
     "three": "^0.183.0"
   },
@@ -35,5 +37,5 @@
     "tailwindcss": "^4",
     "typescript": "^5"
   },
-  "description": "Twyford Holdings Control Center \u2014 powered by OpenClaw"
+  "description": "Twyford Holdings Control Center — powered by OpenClaw"
 }
