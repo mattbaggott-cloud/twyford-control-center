@@ -7,7 +7,9 @@
  * - chat.send: send a message
  * - Gateway pushes new messages via WebSocket events
  * 
- * Auth: token passed as query param on connection URL
+ * Auth: connect message sent after WebSocket opens
+ *   { type: "connect", params: { auth: { token } } }
+ *   Gateway responds with connect confirmation before history is requested
  */
 
 export interface ChatMessage {
@@ -48,15 +50,20 @@ export class GatewayWS {
     this.options.onStatus?.("connecting");
 
     try {
-      // Auth via query param
-      const wsUrl = `${this.options.url}?token=${this.options.token}`;
-      this.ws = new WebSocket(wsUrl);
+      // Connect to plain URL — auth is done via connect message, not query param
+      this.ws = new WebSocket(this.options.url);
 
       this.ws.onopen = () => {
         this.reconnectAttempts = 0;
-        this.options.onStatus?.("connected");
-        // Request chat history on connect
-        this.requestHistory();
+        // Send auth via connect message; history is requested after connect confirmation
+        this.send({
+          type: "connect",
+          params: {
+            auth: {
+              token: this.options.token,
+            },
+          },
+        });
       };
 
       this.ws.onmessage = (event) => {
@@ -86,6 +93,13 @@ export class GatewayWS {
 
   private handleMessage(data: Record<string, unknown>) {
     const type = data.type as string;
+
+    // Connect confirmation — gateway accepted auth
+    if (type === "connect.ok" || type === "connected" || (data.ok === true && !type)) {
+      this.options.onStatus?.("connected");
+      this.requestHistory();
+      return;
+    }
 
     if (type === "chat.history" || type === "chat.history.response") {
       // History response — array of messages
