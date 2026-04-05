@@ -2,11 +2,30 @@
 
 import { MessageSquare } from "lucide-react";
 
-interface ChatSidebarProps {
-  connectionStatus: "connecting" | "connected" | "disconnected" | "error";
+export interface AgentDM {
+  id: string;
+  name: string;
+  emoji: string;
+  color: string;
+  subtitle: string;
+  sessionKey: string;
+  online: boolean;
+  unreadCount: number;
 }
 
-export function ChatSidebar({ connectionStatus }: ChatSidebarProps) {
+interface ChatSidebarProps {
+  connectionStatus: "connecting" | "connected" | "disconnected" | "error";
+  agents: AgentDM[];
+  activeSessionKey: string;
+  onSelectAgent: (sessionKey: string) => void;
+}
+
+export function ChatSidebar({
+  connectionStatus,
+  agents,
+  activeSessionKey,
+  onSelectAgent,
+}: ChatSidebarProps) {
   const statusColors: Record<string, string> = {
     connecting: "var(--warning)",
     connected: "var(--positive)",
@@ -73,9 +92,10 @@ export function ChatSidebar({ connectionStatus }: ChatSidebarProps) {
             height: "8px",
             borderRadius: "50%",
             backgroundColor: statusColors[connectionStatus],
-            boxShadow: connectionStatus === "connected"
-              ? `0 0 6px ${statusColors[connectionStatus]}`
-              : undefined,
+            boxShadow:
+              connectionStatus === "connected"
+                ? `0 0 6px ${statusColors[connectionStatus]}`
+                : undefined,
           }}
         />
         <span style={{ fontSize: "12px", color: "var(--text-secondary)" }}>
@@ -99,102 +119,116 @@ export function ChatSidebar({ connectionStatus }: ChatSidebarProps) {
           Direct Messages
         </div>
 
-        {/* Woods DM — active */}
-        <div
-          style={{
-            padding: "8px 16px",
-            display: "flex",
-            alignItems: "center",
-            gap: "10px",
-            backgroundColor: "var(--accent-soft)",
-            borderLeft: "3px solid var(--accent)",
-            cursor: "pointer",
-          }}
-        >
-          <div
-            style={{
-              width: "28px",
-              height: "28px",
-              borderRadius: "50%",
-              display: "flex",
-              alignItems: "center",
-              justifyContent: "center",
-              border: "2px solid #3fb950",
-              backgroundColor: "var(--surface)",
-              fontSize: "14px",
-              flexShrink: 0,
-            }}
-          >
-            🦞
-          </div>
-          <div style={{ flex: 1, overflow: "hidden" }}>
-            <div style={{ fontSize: "13px", fontWeight: 600, color: "var(--text-primary)" }}>
-              Woods
-            </div>
+        {agents.map((agent) => {
+          const isActive = agent.sessionKey === activeSessionKey;
+          return (
             <div
+              key={agent.id}
+              onClick={() => onSelectAgent(agent.sessionKey)}
               style={{
-                fontSize: "11px",
-                color: "var(--text-muted)",
-                overflow: "hidden",
-                textOverflow: "ellipsis",
-                whiteSpace: "nowrap",
+                padding: "8px 16px",
+                display: "flex",
+                alignItems: "center",
+                gap: "10px",
+                backgroundColor: isActive ? "var(--accent-soft)" : "transparent",
+                borderLeft: isActive ? "3px solid var(--accent)" : "3px solid transparent",
+                cursor: "pointer",
+                transition: "background 150ms ease",
+              }}
+              onMouseEnter={(e) => {
+                if (!isActive) {
+                  e.currentTarget.style.backgroundColor = "var(--surface-hover)";
+                }
+              }}
+              onMouseLeave={(e) => {
+                if (!isActive) {
+                  e.currentTarget.style.backgroundColor = "transparent";
+                }
               }}
             >
-              Chief of Staff
-            </div>
-          </div>
-        </div>
+              {/* Avatar with status dot */}
+              <div style={{ position: "relative", flexShrink: 0 }}>
+                <div
+                  style={{
+                    width: "28px",
+                    height: "28px",
+                    borderRadius: "50%",
+                    display: "flex",
+                    alignItems: "center",
+                    justifyContent: "center",
+                    border: `2px solid ${agent.color}`,
+                    backgroundColor: "var(--surface)",
+                    fontSize: "14px",
+                  }}
+                >
+                  {agent.emoji}
+                </div>
+                {/* Online/offline status dot */}
+                <div
+                  style={{
+                    position: "absolute",
+                    bottom: "-1px",
+                    right: "-1px",
+                    width: "8px",
+                    height: "8px",
+                    borderRadius: "50%",
+                    backgroundColor: agent.online ? "#3fb950" : "#484f58",
+                    border: "2px solid var(--surface)",
+                    boxShadow: agent.online ? "0 0 4px #3fb950" : undefined,
+                  }}
+                />
+                {/* Unread badge */}
+                {agent.unreadCount > 0 && (
+                  <div
+                    style={{
+                      position: "absolute",
+                      top: "-4px",
+                      right: "-6px",
+                      minWidth: "16px",
+                      height: "16px",
+                      borderRadius: "8px",
+                      backgroundColor: "#FF3B30",
+                      color: "white",
+                      fontSize: "10px",
+                      fontWeight: 700,
+                      display: "flex",
+                      alignItems: "center",
+                      justifyContent: "center",
+                      padding: "0 4px",
+                      lineHeight: 1,
+                    }}
+                  >
+                    {agent.unreadCount > 99 ? "99+" : agent.unreadCount}
+                  </div>
+                )}
+              </div>
 
-        {/* Ford DM — placeholder */}
-        <div
-          style={{
-            padding: "8px 16px",
-            display: "flex",
-            alignItems: "center",
-            gap: "10px",
-            cursor: "pointer",
-            transition: "background 150ms ease",
-          }}
-          onMouseEnter={(e) => {
-            e.currentTarget.style.backgroundColor = "var(--surface-hover)";
-          }}
-          onMouseLeave={(e) => {
-            e.currentTarget.style.backgroundColor = "transparent";
-          }}
-        >
-          <div
-            style={{
-              width: "28px",
-              height: "28px",
-              borderRadius: "50%",
-              display: "flex",
-              alignItems: "center",
-              justifyContent: "center",
-              border: "2px solid #FF3B30",
-              backgroundColor: "var(--surface)",
-              fontSize: "14px",
-              flexShrink: 0,
-            }}
-          >
-            👨🏻‍💻
-          </div>
-          <div style={{ flex: 1, overflow: "hidden" }}>
-            <div style={{ fontSize: "13px", fontWeight: 500, color: "var(--text-secondary)" }}>
-              Ford
+              {/* Name + subtitle */}
+              <div style={{ flex: 1, overflow: "hidden" }}>
+                <div
+                  style={{
+                    fontSize: "13px",
+                    fontWeight: isActive ? 600 : 500,
+                    color: isActive ? "var(--text-primary)" : "var(--text-secondary)",
+                  }}
+                >
+                  {agent.name}
+                </div>
+                <div
+                  style={{
+                    fontSize: "11px",
+                    color: "var(--text-muted)",
+                    overflow: "hidden",
+                    textOverflow: "ellipsis",
+                    whiteSpace: "nowrap",
+                  }}
+                >
+                  {agent.subtitle}
+                </div>
+              </div>
             </div>
-            <div
-              style={{
-                fontSize: "11px",
-                color: "var(--text-muted)",
-                overflow: "hidden",
-                textOverflow: "ellipsis",
-                whiteSpace: "nowrap",
-              }}
-            >
-              Full Stack Engineer
-            </div>
-          </div>
-        </div>
+          );
+        })}
       </div>
 
       {/* Channels placeholder */}

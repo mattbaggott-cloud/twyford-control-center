@@ -61,6 +61,19 @@ export class GatewayWS {
     this.options = options;
   }
 
+  get sessionKey(): string {
+    return this.options.sessionKey || "main";
+  }
+
+  /**
+   * Switch the active session without disconnecting the WebSocket.
+   * Updates the internal session key and loads history for the new session.
+   */
+  async switchSession(sessionKey: string): Promise<ChatMessage[]> {
+    this.options.sessionKey = sessionKey;
+    return this.loadHistoryForSession(sessionKey);
+  }
+
   connect() {
     this.intentionalClose = false;
     this.connectSent = false;
@@ -230,26 +243,31 @@ export class GatewayWS {
 
   private async loadHistory() {
     try {
-      const result = await this.request("chat.history", {
-        sessionKey: this.options.sessionKey || "main",
-        limit: 200,
-      });
-      const messages = (Array.isArray(result?.messages) ? result.messages : [])
-        .filter((m: any) => {
-          // Only include user and assistant messages
-          if (m.role !== "user" && m.role !== "assistant") return false;
-          // Extract text content (filters out tool_use, thinking, etc.)
-          const text = this.extractText(m);
-          // Skip empty messages and NO_REPLY messages
-          if (!text || text.trim().length === 0) return false;
-          if (/^\s*NO_REPLY\s*$/.test(text)) return false;
-          return true;
-        })
-        .map((m: any) => this.parseChatMessage(m));
+      const messages = await this.loadHistoryForSession(this.options.sessionKey || "main");
       this.options.onHistory?.(messages);
     } catch {
       // History load failed — not fatal
     }
+  }
+
+  /**
+   * Load chat history for a specific session key.
+   * Returns parsed messages array. Used by both initial load and switchSession.
+   */
+  async loadHistoryForSession(sessionKey: string): Promise<ChatMessage[]> {
+    const result = await this.request("chat.history", {
+      sessionKey,
+      limit: 200,
+    });
+    return (Array.isArray(result?.messages) ? result.messages : [])
+      .filter((m: any) => {
+        if (m.role !== "user" && m.role !== "assistant") return false;
+        const text = this.extractText(m);
+        if (!text || text.trim().length === 0) return false;
+        if (/^\s*NO_REPLY\s*$/.test(text)) return false;
+        return true;
+      })
+      .map((m: any) => this.parseChatMessage(m));
   }
 
   private parseChatMessage(m: any): ChatMessage {
