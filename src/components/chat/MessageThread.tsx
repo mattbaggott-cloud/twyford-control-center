@@ -2,10 +2,29 @@
 
 import { useRef, useEffect } from "react";
 import { MessageBubble, MessageBubbleProps } from "./MessageBubble";
+import { ThreadView } from "./ThreadView";
+
+interface ThreadData {
+  id: string;
+  fromAgent: { id: string; name: string; emoji: string };
+  toAgent: { id: string; name: string; emoji: string };
+  messages: {
+    from: string;
+    to: string;
+    message: string;
+    reply: string | null;
+    status: string;
+    timestamp: string;
+  }[];
+  startedAt: string;
+  lastActivityAt: string;
+  taskSummary: string;
+}
 
 interface MessageThreadProps {
   messages: MessageBubbleProps[];
   isLoading?: boolean;
+  threads?: ThreadData[];
 }
 
 function formatDateGroup(isoString: string): string {
@@ -39,16 +58,42 @@ function groupMessagesByDate(messages: MessageBubbleProps[]): Map<string, Messag
   return groups;
 }
 
-export function MessageThread({ messages, isLoading }: MessageThreadProps) {
+/**
+ * Find the thread that matches an assistant message by timestamp proximity.
+ * A thread is linked to a message if the thread started within 2 minutes
+ * of the message timestamp.
+ */
+function findThreadForMessage(
+  msg: MessageBubbleProps,
+  threads: ThreadData[],
+  usedThreadIds: Set<string>
+): ThreadData | null {
+  if (msg.role !== "assistant" || !threads.length) return null;
+
+  const msgTime = new Date(msg.timestamp).getTime();
+  const WINDOW_MS = 2 * 60 * 1000; // 2 minutes
+
+  for (const thread of threads) {
+    if (usedThreadIds.has(thread.id)) continue;
+    const threadTime = new Date(thread.startedAt).getTime();
+    if (Math.abs(threadTime - msgTime) <= WINDOW_MS) {
+      usedThreadIds.add(thread.id);
+      return thread;
+    }
+  }
+  return null;
+}
+
+export function MessageThread({ messages, isLoading, threads = [] }: MessageThreadProps) {
   const bottomRef = useRef<HTMLDivElement>(null);
   const containerRef = useRef<HTMLDivElement>(null);
 
-  // Auto-scroll to bottom when new messages arrive
   useEffect(() => {
     bottomRef.current?.scrollIntoView({ behavior: "smooth" });
   }, [messages]);
 
   const dateGroups = groupMessagesByDate(messages);
+  const usedThreadIds = new Set<string>();
 
   return (
     <div
@@ -126,9 +171,15 @@ export function MessageThread({ messages, isLoading }: MessageThreadProps) {
           </div>
 
           {/* Messages in group */}
-          {msgs.map((msg, idx) => (
-            <MessageBubble key={`${msg.timestamp}-${idx}`} {...msg} />
-          ))}
+          {msgs.map((msg, idx) => {
+            const matchedThread = findThreadForMessage(msg, threads, usedThreadIds);
+            return (
+              <div key={`${msg.timestamp}-${idx}`}>
+                <MessageBubble {...msg} />
+                {matchedThread && <ThreadView thread={matchedThread} />}
+              </div>
+            );
+          })}
         </div>
       ))}
 

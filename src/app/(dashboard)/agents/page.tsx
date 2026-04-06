@@ -12,8 +12,10 @@ import {
   ExternalLink,
   GitBranch,
   LayoutGrid,
+  BookOpen,
 } from "lucide-react";
 import { AgentOrganigrama } from "@/components/AgentOrganigrama";
+import { DiaryPanel } from "@/components/DiaryPanel";
 
 interface Agent {
   id: string;
@@ -39,7 +41,8 @@ interface Agent {
 export default function AgentsPage() {
   const [agents, setAgents] = useState<Agent[]>([]);
   const [loading, setLoading] = useState(true);
-  const [activeTab, setActiveTab] = useState<"cards" | "organigrama">("cards");
+  const [activeTab, setActiveTab] = useState<"cards" | "organigrama" | "diary">("cards");
+  const [selectedDiaryAgent, setSelectedDiaryAgent] = useState<Agent | null>(null);
 
   useEffect(() => {
     fetchAgents();
@@ -110,6 +113,7 @@ export default function AgentsPage() {
         {[
           { id: "cards" as const, label: "Agent Cards", icon: LayoutGrid },
           { id: "organigrama" as const, label: "Org Chart", icon: GitBranch },
+          { id: "diary" as const, label: "Diary", icon: BookOpen },
         ].map(({ id, label, icon: Icon }) => (
           <button
             key={id}
@@ -117,12 +121,13 @@ export default function AgentsPage() {
             className="flex items-center gap-2 px-4 py-2 font-medium transition-all"
             style={{
               color: activeTab === id ? "var(--accent)" : "var(--text-secondary)",
-              borderBottom: activeTab === id ? "2px solid var(--accent)" : "2px solid transparent",
-              background: "none", border: "none", cursor: "pointer",
+              background: "none",
+              border: "none",
               borderBottomStyle: "solid",
               borderBottomWidth: "2px",
               borderBottomColor: activeTab === id ? "var(--accent)" : "transparent",
               paddingBottom: "0.5rem",
+              cursor: "pointer",
             }}
           >
             <Icon className="w-4 h-4" />
@@ -139,6 +144,98 @@ export default function AgentsPage() {
             <p className="text-sm" style={{ color: "var(--text-muted)" }}>Visualization of agent communication allowances</p>
           </div>
           <AgentOrganigrama agents={agents} />
+        </div>
+      )}
+
+      {/* Diary View */}
+      {activeTab === "diary" && (
+        <div className="grid grid-cols-1 lg:grid-cols-4 gap-4">
+          {/* Agent Selector */}
+          <div className="lg:col-span-1 space-y-2">
+            {agents.map((agent) => (
+              <button
+                key={agent.id}
+                onClick={() => setSelectedDiaryAgent(agent)}
+                className="w-full flex items-center gap-3 px-4 py-3 rounded-lg transition-all text-left"
+                style={{
+                  backgroundColor:
+                    selectedDiaryAgent?.id === agent.id
+                      ? `${agent.color}15`
+                      : "var(--card)",
+                  border:
+                    selectedDiaryAgent?.id === agent.id
+                      ? `2px solid ${agent.color}`
+                      : "1px solid var(--border)",
+                  cursor: "pointer",
+                }}
+              >
+                <div
+                  className="w-10 h-10 rounded-lg flex items-center justify-center text-xl"
+                  style={{
+                    backgroundColor: `${agent.color}20`,
+                    border: `2px solid ${agent.color}`,
+                  }}
+                >
+                  {agent.emoji}
+                </div>
+                <div>
+                  <div
+                    className="text-sm font-bold"
+                    style={{
+                      fontFamily: "var(--font-heading)",
+                      color: "var(--text-primary)",
+                    }}
+                  >
+                    {agent.name}
+                  </div>
+                  <div className="flex items-center gap-1">
+                    <Circle
+                      className="w-2 h-2"
+                      style={{
+                        fill: agent.status === "online" ? "#4ade80" : "#6b7280",
+                        color: agent.status === "online" ? "#4ade80" : "#6b7280",
+                      }}
+                    />
+                    <span className="text-xs" style={{ color: "var(--text-muted)" }}>
+                      {agent.status}
+                    </span>
+                  </div>
+                </div>
+              </button>
+            ))}
+          </div>
+
+          {/* Diary Content */}
+          <div className="lg:col-span-3">
+            {selectedDiaryAgent ? (
+              <DiaryPanel
+                agentId={selectedDiaryAgent.id}
+                agentName={selectedDiaryAgent.name}
+                agentColor={selectedDiaryAgent.color}
+              />
+            ) : (
+              <div
+                className="flex items-center justify-center py-16 rounded-xl"
+                style={{
+                  backgroundColor: "var(--card)",
+                  border: "1px solid var(--border)",
+                }}
+              >
+                <div className="text-center">
+                  <BookOpen
+                    className="w-10 h-10 mx-auto mb-3"
+                    style={{ color: "var(--text-muted)" }}
+                  />
+                  <p
+                    className="text-sm"
+                    style={{ color: "var(--text-muted)" }}
+                  >
+                    Select an agent to view their diary
+                  </p>
+                </div>
+              </div>
+            )}
+          </div>
         </div>
       )}
 

@@ -5,7 +5,7 @@ import { OrbitControls, Sky, Environment } from '@react-three/drei';
 import { Suspense, useState } from 'react';
 import { Vector3 } from 'three';
 import { AGENTS } from './agentsConfig';
-import type { AgentState } from './agentsConfig';
+import type { AgentState, AgentStatus } from './agentsConfig';
 import AgentDesk from './AgentDesk';
 import Floor from './Floor';
 import Walls from './Walls';

@@ -284,10 +284,16 @@ export class GatewayWS {
   }
 
   async sendMessage(text: string) {
-    // Add user message locally handled by the page component
+    return this.sendMessageToSession(text, this.options.sessionKey || "main");
+  }
+
+  /**
+   * Send a message to a specific session key (for @mention routing).
+   */
+  async sendMessageToSession(text: string, sessionKey: string) {
     try {
       await this.request("chat.send", {
-        sessionKey: this.options.sessionKey || "main",
+        sessionKey,
         message: text,
         deliver: false,
         idempotencyKey: crypto.randomUUID(),

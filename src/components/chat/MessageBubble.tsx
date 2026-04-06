@@ -12,6 +12,7 @@ export interface MessageBubbleProps {
   timestamp: string; // ISO string
   agent?: string;
   isStreaming?: boolean;
+  isThreadReply?: boolean; // true = reply within a thread, not a new thread starter
 }
 
 const AGENT_AVATARS: Record<string, { emoji: string; color: string }> = {
