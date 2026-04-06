@@ -1,6 +1,7 @@
 "use client";
 
-import { MessageSquare, Hash, Plus, Pin } from "lucide-react";
+import { useState, useEffect } from "react";
+import { MessageSquare, Hash, Plus, Pin, Menu, X, Bell, BellOff } from "lucide-react";
 import type { ChannelSidebarItem } from "@/types/channel";
 
 export interface AgentDM {
@@ -22,6 +23,11 @@ interface ChatSidebarProps {
   onSelectAgent: (sessionKey: string) => void;
   onSelectChannel: (sessionKey: string) => void;
   onCreateChannel: () => void;
+  soundEnabled?: boolean;
+  onToggleSound?: () => void;
+  // Mobile: controlled drawer
+  mobileOpen?: boolean;
+  onMobileClose?: () => void;
 }
 
 export function ChatSidebar({
@@ -32,6 +38,10 @@ export function ChatSidebar({
   onSelectAgent,
   onSelectChannel,
   onCreateChannel,
+  soundEnabled,
+  onToggleSound,
+  mobileOpen,
+  onMobileClose,
 }: ChatSidebarProps) {
   const statusColors: Record<string, string> = {
     connecting: "var(--warning)",
@@ -47,13 +57,22 @@ export function ChatSidebar({
     error: "Connection Error",
   };
 
-  // Sort channels: pinned first, then alphabetical
   const sortedChannels = [...channels].sort((a, b) => {
     if (a.pinned !== b.pinned) return a.pinned ? -1 : 1;
     return a.name.localeCompare(b.name);
   });
 
-  return (
+  const handleSelectAgent = (sessionKey: string) => {
+    onSelectAgent(sessionKey);
+    onMobileClose?.();
+  };
+
+  const handleSelectChannel = (sessionKey: string) => {
+    onSelectChannel(sessionKey);
+    onMobileClose?.();
+  };
+
+  const sidebarContent = (
     <div
       style={{
         width: "240px",
@@ -70,6 +89,9 @@ export function ChatSidebar({
         style={{
           padding: "16px",
           borderBottom: "1px solid var(--border)",
+          display: "flex",
+          alignItems: "center",
+          justifyContent: "space-between",
         }}
       >
         <h2
@@ -87,6 +109,50 @@ export function ChatSidebar({
           <MessageSquare style={{ width: 16, height: 16, color: "var(--accent)" }} />
           Messages
         </h2>
+        <div style={{ display: "flex", alignItems: "center", gap: "4px" }}>
+          {onToggleSound && (
+            <button
+              onClick={onToggleSound}
+              style={{
+                background: "none",
+                border: "none",
+                cursor: "pointer",
+                padding: "4px",
+                borderRadius: "4px",
+                color: soundEnabled ? "var(--accent)" : "var(--text-muted)",
+                display: "flex",
+                alignItems: "center",
+              }}
+              onMouseEnter={(e) => { e.currentTarget.style.backgroundColor = "var(--surface-hover)"; }}
+              onMouseLeave={(e) => { e.currentTarget.style.backgroundColor = "transparent"; }}
+              title={soundEnabled ? "Mute notification sounds" : "Enable notification sounds"}
+            >
+              {soundEnabled ? (
+                <Bell style={{ width: 14, height: 14 }} />
+              ) : (
+                <BellOff style={{ width: 14, height: 14 }} />
+              )}
+            </button>
+          )}
+          {/* Mobile close */}
+          {onMobileClose && (
+            <button
+              onClick={onMobileClose}
+              style={{
+                background: "none",
+                border: "none",
+                cursor: "pointer",
+                padding: "4px",
+                borderRadius: "4px",
+                color: "var(--text-muted)",
+                display: "flex",
+                alignItems: "center",
+              }}
+            >
+              <X style={{ width: 16, height: 16 }} />
+            </button>
+          )}
+        </div>
       </div>
 
       {/* Connection status */}
@@ -105,10 +171,7 @@ export function ChatSidebar({
             height: "8px",
             borderRadius: "50%",
             backgroundColor: statusColors[connectionStatus],
-            boxShadow:
-              connectionStatus === "connected"
-                ? `0 0 6px ${statusColors[connectionStatus]}`
-                : undefined,
+            boxShadow: connectionStatus === "connected" ? `0 0 6px ${statusColors[connectionStatus]}` : undefined,
           }}
         />
         <span style={{ fontSize: "12px", color: "var(--text-secondary)" }}>
@@ -151,14 +214,8 @@ export function ChatSidebar({
                 alignItems: "center",
                 borderRadius: "4px",
               }}
-              onMouseEnter={(e) => {
-                e.currentTarget.style.color = "var(--accent)";
-                e.currentTarget.style.backgroundColor = "var(--surface-hover)";
-              }}
-              onMouseLeave={(e) => {
-                e.currentTarget.style.color = "var(--text-muted)";
-                e.currentTarget.style.backgroundColor = "transparent";
-              }}
+              onMouseEnter={(e) => { e.currentTarget.style.color = "var(--accent)"; e.currentTarget.style.backgroundColor = "var(--surface-hover)"; }}
+              onMouseLeave={(e) => { e.currentTarget.style.color = "var(--text-muted)"; e.currentTarget.style.backgroundColor = "transparent"; }}
               title="Create channel"
             >
               <Plus style={{ width: 14, height: 14 }} />
@@ -170,7 +227,7 @@ export function ChatSidebar({
             return (
               <div
                 key={channel.id}
-                onClick={() => onSelectChannel(channel.sessionKey)}
+                onClick={() => handleSelectChannel(channel.sessionKey)}
                 style={{
                   padding: "6px 16px",
                   display: "flex",
@@ -181,25 +238,10 @@ export function ChatSidebar({
                   cursor: "pointer",
                   transition: "background 150ms ease",
                 }}
-                onMouseEnter={(e) => {
-                  if (!isActive) {
-                    e.currentTarget.style.backgroundColor = "var(--surface-hover)";
-                  }
-                }}
-                onMouseLeave={(e) => {
-                  if (!isActive) {
-                    e.currentTarget.style.backgroundColor = "transparent";
-                  }
-                }}
+                onMouseEnter={(e) => { if (!isActive) e.currentTarget.style.backgroundColor = "var(--surface-hover)"; }}
+                onMouseLeave={(e) => { if (!isActive) e.currentTarget.style.backgroundColor = "transparent"; }}
               >
-                <Hash
-                  style={{
-                    width: 14,
-                    height: 14,
-                    color: isActive ? "var(--accent)" : "var(--text-muted)",
-                    flexShrink: 0,
-                  }}
-                />
+                <Hash style={{ width: 14, height: 14, color: isActive ? "var(--accent)" : "var(--text-muted)", flexShrink: 0 }} />
                 <span
                   style={{
                     fontSize: "13px",
@@ -213,16 +255,7 @@ export function ChatSidebar({
                 >
                   {channel.name.replace("#", "")}
                 </span>
-                {channel.pinned && (
-                  <Pin
-                    style={{
-                      width: 10,
-                      height: 10,
-                      color: "var(--text-muted)",
-                      flexShrink: 0,
-                    }}
-                  />
-                )}
+                {channel.pinned && <Pin style={{ width: 10, height: 10, color: "var(--text-muted)", flexShrink: 0 }} />}
                 {channel.unreadCount > 0 && (
                   <div
                     style={{
@@ -250,12 +283,7 @@ export function ChatSidebar({
         </div>
 
         {/* Direct Messages section */}
-        <div
-          style={{
-            padding: "12px 0",
-            borderTop: "1px solid var(--border)",
-          }}
-        >
+        <div style={{ padding: "12px 0", borderTop: "1px solid var(--border)" }}>
           <div
             style={{
               padding: "0 16px 8px",
@@ -275,7 +303,7 @@ export function ChatSidebar({
             return (
               <div
                 key={agent.id}
-                onClick={() => onSelectAgent(agent.sessionKey)}
+                onClick={() => handleSelectAgent(agent.sessionKey)}
                 style={{
                   padding: "8px 16px",
                   display: "flex",
@@ -286,18 +314,9 @@ export function ChatSidebar({
                   cursor: "pointer",
                   transition: "background 150ms ease",
                 }}
-                onMouseEnter={(e) => {
-                  if (!isActive) {
-                    e.currentTarget.style.backgroundColor = "var(--surface-hover)";
-                  }
-                }}
-                onMouseLeave={(e) => {
-                  if (!isActive) {
-                    e.currentTarget.style.backgroundColor = "transparent";
-                  }
-                }}
+                onMouseEnter={(e) => { if (!isActive) e.currentTarget.style.backgroundColor = "var(--surface-hover)"; }}
+                onMouseLeave={(e) => { if (!isActive) e.currentTarget.style.backgroundColor = "transparent"; }}
               >
-                {/* Avatar with status dot */}
                 <div style={{ position: "relative", flexShrink: 0 }}>
                   <div
                     style={{
@@ -351,27 +370,11 @@ export function ChatSidebar({
                     </div>
                   )}
                 </div>
-
-                {/* Name + subtitle */}
                 <div style={{ flex: 1, overflow: "hidden" }}>
-                  <div
-                    style={{
-                      fontSize: "13px",
-                      fontWeight: isActive ? 600 : 500,
-                      color: isActive ? "var(--text-primary)" : "var(--text-secondary)",
-                    }}
-                  >
+                  <div style={{ fontSize: "13px", fontWeight: isActive ? 600 : 500, color: isActive ? "var(--text-primary)" : "var(--text-secondary)" }}>
                     {agent.name}
                   </div>
-                  <div
-                    style={{
-                      fontSize: "11px",
-                      color: "var(--text-muted)",
-                      overflow: "hidden",
-                      textOverflow: "ellipsis",
-                      whiteSpace: "nowrap",
-                    }}
-                  >
+                  <div style={{ fontSize: "11px", color: "var(--text-muted)", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>
                     {agent.subtitle}
                   </div>
                 </div>
@@ -381,5 +384,39 @@ export function ChatSidebar({
         </div>
       </div>
     </div>
+  );
+
+  return (
+    <>
+      {/* Desktop: always visible */}
+      <div className="chat-sidebar-desktop">
+        {sidebarContent}
+      </div>
+
+      {/* Mobile drawer overlay */}
+      {mobileOpen && (
+        <div
+          style={{
+            position: "fixed",
+            inset: 0,
+            zIndex: 1000,
+            display: "flex",
+          }}
+          onClick={(e) => { if (e.target === e.currentTarget) onMobileClose?.(); }}
+        >
+          <div
+            style={{
+              backgroundColor: "rgba(0,0,0,0.5)",
+              position: "absolute",
+              inset: 0,
+            }}
+            onClick={onMobileClose}
+          />
+          <div style={{ position: "relative", zIndex: 1, height: "100%" }}>
+            {sidebarContent}
+          </div>
+        </div>
+      )}
+    </>
   );
 }

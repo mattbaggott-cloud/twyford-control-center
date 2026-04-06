@@ -3,6 +3,7 @@
 import { useRef, useEffect } from "react";
 import { MessageBubble, MessageBubbleProps } from "./MessageBubble";
 import { ThreadView } from "./ThreadView";
+import { ReactionsData } from "./MessageReactions";
 
 interface ThreadData {
   id: string;
@@ -25,6 +26,14 @@ interface MessageThreadProps {
   messages: MessageBubbleProps[];
   isLoading?: boolean;
   threads?: ThreadData[];
+  reactions?: ReactionsData;
+  sessionKey?: string;
+  onEdit?: (id: string, newContent: string) => void;
+  onDelete?: (id: string) => void;
+  onReply?: (id: string, sender: string, preview: string) => void;
+  onReact?: (messageId: string, emoji: string) => void;
+  onScrollToMessage?: (messageId: string) => void;
+  messageRefs?: React.MutableRefObject<Map<string, HTMLDivElement>>;
 }
 
 function formatDateGroup(isoString: string): string {
@@ -58,21 +67,14 @@ function groupMessagesByDate(messages: MessageBubbleProps[]): Map<string, Messag
   return groups;
 }
 
-/**
- * Find the thread that matches an assistant message by timestamp proximity.
- * A thread is linked to a message if the thread started within 2 minutes
- * of the message timestamp.
- */
 function findThreadForMessage(
   msg: MessageBubbleProps,
   threads: ThreadData[],
   usedThreadIds: Set<string>
 ): ThreadData | null {
   if (msg.role !== "assistant" || !threads.length) return null;
-
   const msgTime = new Date(msg.timestamp).getTime();
-  const WINDOW_MS = 2 * 60 * 1000; // 2 minutes
-
+  const WINDOW_MS = 2 * 60 * 1000;
   for (const thread of threads) {
     if (usedThreadIds.has(thread.id)) continue;
     const threadTime = new Date(thread.startedAt).getTime();
@@ -84,13 +86,43 @@ function findThreadForMessage(
   return null;
 }
 
-export function MessageThread({ messages, isLoading, threads = [] }: MessageThreadProps) {
+export function MessageThread({
+  messages,
+  isLoading,
+  threads = [],
+  reactions,
+  sessionKey,
+  onEdit,
+  onDelete,
+  onReply,
+  onReact,
+  onScrollToMessage,
+  messageRefs,
+}: MessageThreadProps) {
   const bottomRef = useRef<HTMLDivElement>(null);
   const containerRef = useRef<HTMLDivElement>(null);
 
   useEffect(() => {
     bottomRef.current?.scrollIntoView({ behavior: "smooth" });
   }, [messages]);
+
+  // Listen for edit-last-message event from keyboard shortcut
+  useEffect(() => {
+    function handleEditLast() {
+      // Find last user message and trigger its edit
+      const lastUserMsg = [...messages].reverse().find((m) => m.role === "user" && !m.isDeleted);
+      if (lastUserMsg && lastUserMsg.id && onEdit) {
+        // Signal to the bubble — we fire a custom event on the message element
+        const el = messageRefs?.current.get(lastUserMsg.id);
+        if (el) {
+          const editBtn = el.querySelector<HTMLButtonElement>('[title="Edit message"]');
+          editBtn?.click();
+        }
+      }
+    }
+    document.addEventListener("edit-last-message", handleEditLast);
+    return () => document.removeEventListener("edit-last-message", handleEditLast);
+  }, [messages, onEdit, messageRefs]);
 
   const dateGroups = groupMessagesByDate(messages);
   const usedThreadIds = new Set<string>();
@@ -108,16 +140,7 @@ export function MessageThread({ messages, isLoading, threads = [] }: MessageThre
       }}
     >
       {isLoading && messages.length === 0 && (
-        <div
-          style={{
-            flex: 1,
-            display: "flex",
-            alignItems: "center",
-            justifyContent: "center",
-            color: "var(--text-muted)",
-            fontSize: "14px",
-          }}
-        >
+        <div style={{ flex: 1, display: "flex", alignItems: "center", justifyContent: "center", color: "var(--text-muted)", fontSize: "14px" }}>
           <div style={{ textAlign: "center" }}>
             <div style={{ fontSize: "32px", marginBottom: "12px" }}>🦞</div>
             <div>Connecting to gateway…</div>
@@ -126,16 +149,7 @@ export function MessageThread({ messages, isLoading, threads = [] }: MessageThre
       )}
 
       {!isLoading && messages.length === 0 && (
-        <div
-          style={{
-            flex: 1,
-            display: "flex",
-            alignItems: "center",
-            justifyContent: "center",
-            color: "var(--text-muted)",
-            fontSize: "14px",
-          }}
-        >
+        <div style={{ flex: 1, display: "flex", alignItems: "center", justifyContent: "center", color: "var(--text-muted)", fontSize: "14px" }}>
           <div style={{ textAlign: "center" }}>
             <div style={{ fontSize: "32px", marginBottom: "12px" }}>💬</div>
             <div>No messages yet. Send one below.</div>
@@ -146,14 +160,7 @@ export function MessageThread({ messages, isLoading, threads = [] }: MessageThre
       {Array.from(dateGroups.entries()).map(([dateLabel, msgs]) => (
         <div key={dateLabel}>
           {/* Date separator */}
-          <div
-            style={{
-              display: "flex",
-              alignItems: "center",
-              gap: "12px",
-              padding: "16px 0 8px",
-            }}
-          >
+          <div style={{ display: "flex", alignItems: "center", gap: "12px", padding: "16px 0 8px" }}>
             <div style={{ flex: 1, height: "1px", backgroundColor: "var(--border)" }} />
             <span
               style={{
@@ -170,12 +177,29 @@ export function MessageThread({ messages, isLoading, threads = [] }: MessageThre
             <div style={{ flex: 1, height: "1px", backgroundColor: "var(--border)" }} />
           </div>
 
-          {/* Messages in group */}
           {msgs.map((msg, idx) => {
             const matchedThread = findThreadForMessage(msg, threads, usedThreadIds);
+            const msgId = msg.id || `${msg.timestamp}-${idx}`;
             return (
-              <div key={`${msg.timestamp}-${idx}`}>
-                <MessageBubble {...msg} />
+              <div
+                key={msgId}
+                ref={(el) => {
+                  if (el && messageRefs && msg.id) {
+                    messageRefs.current.set(msg.id, el);
+                  }
+                }}
+                style={{ transition: "background-color 500ms ease" }}
+              >
+                <MessageBubble
+                  {...msg}
+                  reactions={reactions}
+                  sessionKey={sessionKey}
+                  onEdit={onEdit}
+                  onDelete={onDelete}
+                  onReply={onReply}
+                  onReact={onReact}
+                  onScrollToMessage={onScrollToMessage}
+                />
                 {matchedThread && <ThreadView thread={matchedThread} />}
               </div>
             );

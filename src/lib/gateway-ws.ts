@@ -35,6 +35,7 @@ export interface ChatMessage {
 type MessageHandler = (message: ChatMessage) => void;
 type StatusHandler = (status: "connecting" | "connected" | "disconnected" | "error") => void;
 type StreamHandler = (chunk: { content: string; messageId: string }) => void;
+type NotificationHandler = (sessionKey: string, message: ChatMessage, sessionLabel: string) => void;
 
 interface GatewayWSOptions {
   url: string;
@@ -44,6 +45,7 @@ interface GatewayWSOptions {
   onStatus?: StatusHandler;
   onStream?: StreamHandler;
   onHistory?: (messages: ChatMessage[]) => void;
+  onNotification?: NotificationHandler;
 }
 
 export class GatewayWS {
@@ -56,6 +58,9 @@ export class GatewayWS {
   private intentionalClose = false;
   private connectSent = false;
   private connectTimer: ReturnType<typeof setTimeout> | null = null;
+  private lastStreamedLength = 0; // Track streamed content length to deduplicate deltas
+  private lastRunId = ""; // Track current run to reset dedup on new messages
+  private activeSessionKey = "main"; // Track which session is currently active
 
   constructor(options: GatewayWSOptions) {
     this.options = options;
@@ -71,6 +76,7 @@ export class GatewayWS {
    */
   async switchSession(sessionKey: string): Promise<ChatMessage[]> {
     this.options.sessionKey = sessionKey;
+    this.activeSessionKey = sessionKey;
     return this.loadHistoryForSession(sessionKey);
   }
 
@@ -157,25 +163,37 @@ export class GatewayWS {
     const state = payload.state;
 
     if (state === "delta") {
-      // Extract text from message, filter out thinking/reasoning content
+      const runId = payload.runId || "";
+      // Reset dedup tracking when a new run starts
+      if (runId !== this.lastRunId) {
+        this.lastRunId = runId;
+        this.lastStreamedLength = 0;
+      }
+
+      // Extract full accumulated text from the delta
       const msg = payload.message;
+      let fullText = "";
       if (msg && Array.isArray(msg.content)) {
-        // Only pass through text blocks, skip thinking/tool_use/etc.
         const textParts = msg.content
           .filter((c: any) => c.type === "text" && typeof c.text === "string")
           .map((c: any) => c.text);
-        if (textParts.length > 0) {
-          this.options.onStream?.({ content: textParts.join(""), messageId: payload.runId || "" });
-        }
+        fullText = textParts.join("");
       } else {
-        const text = this.extractText(msg);
-        if (text) {
-          this.options.onStream?.({ content: text, messageId: payload.runId || "" });
-        }
+        fullText = this.extractText(msg) || "";
+      }
+
+      // Only emit the NEW content (what we haven't streamed yet)
+      if (fullText.length > this.lastStreamedLength) {
+        const newContent = fullText.slice(this.lastStreamedLength);
+        this.lastStreamedLength = fullText.length;
+        this.options.onStream?.({ content: newContent, messageId: runId });
       }
     } else if (state === "final") {
+      // Reset stream tracking
+      this.lastStreamedLength = 0;
+      this.lastRunId = "";
+
       const msg = this.parseAssistantMessage(payload.message);
-      // Ignore messages with no text content
       if (msg && msg.content.trim().length > 0) {
         this.options.onMessage?.(msg);
       }
@@ -216,7 +234,7 @@ export class GatewayWS {
     this.connectSent = true;
 
     try {
-      const result = await this.request("connect", {
+      await this.request("connect", {
         minProtocol: 3,
         maxProtocol: 3,
         client: {
@@ -229,9 +247,9 @@ export class GatewayWS {
         scopes: ["operator.admin"],
         auth: { token: this.options.token },
         caps: ["tool-events"],
-
       });
 
+      this.activeSessionKey = this.options.sessionKey || "main";
       this.options.onStatus?.("connected");
       // Load chat history
       this.loadHistory();
