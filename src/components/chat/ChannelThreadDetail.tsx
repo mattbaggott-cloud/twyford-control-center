@@ -3,6 +3,7 @@
 import { ArrowLeft } from "lucide-react";
 import { MessageBubble, MessageBubbleProps } from "./MessageBubble";
 import { ThreadView } from "./ThreadView";
+import { ReactionsData } from "./MessageReactions";
 import { useRef, useEffect } from "react";
 
 interface ThreadData {
@@ -27,6 +28,12 @@ interface ChannelThreadDetailProps {
   replies: MessageBubbleProps[];
   onBack: () => void;
   a2aThreads?: ThreadData[];
+  reactions?: ReactionsData;
+  sessionKey?: string;
+  onReact?: (messageId: string, emoji: string) => void;
+  onEdit?: (id: string, newContent: string) => void;
+  onDelete?: (id: string) => void;
+  onReply?: (id: string, sender: string, preview: string) => void;
 }
 
 export function ChannelThreadDetail({
@@ -34,6 +41,12 @@ export function ChannelThreadDetail({
   replies,
   onBack,
   a2aThreads = [],
+  reactions,
+  sessionKey,
+  onReact,
+  onEdit,
+  onDelete,
+  onReply,
 }: ChannelThreadDetailProps) {
   const bottomRef = useRef<HTMLDivElement>(null);
 
@@ -138,7 +151,7 @@ export function ChannelThreadDetail({
         }}
       >
         {/* Parent message */}
-        <MessageBubble {...parentMessage} />
+        <MessageBubble {...parentMessage} reactions={reactions} sessionKey={sessionKey} onReact={onReact} onEdit={onEdit} onDelete={onDelete} onReply={onReply} />
 
         {/* Thread separator */}
         {replies.length > 0 && (
@@ -171,7 +184,7 @@ export function ChannelThreadDetail({
           const a2aThread = findA2AThread(msg);
           return (
             <div key={`${msg.timestamp}-${idx}`}>
-              <MessageBubble {...msg} />
+              <MessageBubble {...msg} reactions={reactions} sessionKey={sessionKey} onReact={onReact} onEdit={onEdit} onDelete={onDelete} onReply={onReply} />
               {a2aThread && <ThreadView thread={a2aThread} />}
             </div>
           );

@@ -160,6 +160,23 @@ export class GatewayWS {
 
   private handleChatEvent(payload: any) {
     if (!payload) return;
+
+    // If message is from a different session, fire notification but don't render it
+    if (payload.sessionKey && payload.sessionKey !== this.sessionKey) {
+      // Fire notification for cross-session messages (e.g. Woods replies while viewing Ford)
+      if (payload.state === "final") {
+        const msg = this.parseAssistantMessage(payload.message);
+        if (msg && msg.content.trim().length > 0) {
+          const trimmed = msg.content.trim();
+          if (!/^(NO_REPLY|REPLY_SKIP|ANNOUNCE_SKIP|HEARTBEAT_OK)$/.test(trimmed)) {
+            const label = payload.sessionKey.includes("ford") ? "Ford" : "Woods";
+            this.options.onNotification?.(payload.sessionKey, msg, label);
+          }
+        }
+      }
+      return;
+    }
+
     const state = payload.state;
 
     if (state === "delta") {
@@ -195,6 +212,9 @@ export class GatewayWS {
 
       const msg = this.parseAssistantMessage(payload.message);
       if (msg && msg.content.trim().length > 0) {
+        // Filter internal protocol markers
+        const trimmed = msg.content.trim();
+        if (/^(NO_REPLY|REPLY_SKIP|ANNOUNCE_SKIP|HEARTBEAT_OK)$/.test(trimmed)) return;
         this.options.onMessage?.(msg);
       }
     } else if (state === "error") {
@@ -284,8 +304,20 @@ export class GatewayWS {
         const text = this.extractText(m);
         if (!text || text.trim().length === 0) return false;
         if (/^\s*NO_REPLY\s*$/.test(text)) return false;
+        if (/^\s*REPLY_SKIP\s*$/.test(text)) return false;
+        if (/^\s*ANNOUNCE_SKIP\s*$/.test(text)) return false;
+        if (/^\s*HEARTBEAT_OK\s*$/.test(text)) return false;
         if (text.includes("<<<")) return false;
         if (text.includes("OPENCLAW_INTERNAL") || text.includes("UNTRUSTED_CHILD")) return false;
+        // Filter "Agent-to-agent announce step" internal messages
+        if (/Agent-to-agent announce/i.test(text)) return false;
+        // In agent DM sessions (agent:*:main), hide messages not from Matt
+        // This prevents Woods→Ford chatter from appearing in your DM with Ford
+        const isAgentDM = /^agent:[^:]+:main$/.test(sessionKey);
+        if (isAgentDM && m.role === "user") {
+          const raw = JSON.stringify(m.content || "");
+          if (!raw.includes("openclaw-control-ui")) return false;
+        }
         return true;
       })
       .map((m: any) => this.parseChatMessage(m));

@@ -452,8 +452,12 @@ export default function ChatPage() {
         messageCacheRef.current.set(activeSessionRef.current, bubbles);
       },
       onMessage: (msg) => {
+        // Filter internal protocol markers from real-time messages
+        const trimmed = msg.content.trim();
+        if (/^(NO_REPLY|REPLY_SKIP|ANNOUNCE_SKIP|HEARTBEAT_OK)$/.test(trimmed)) return;
+        if (/Agent-to-agent announce/i.test(trimmed)) return;
+
         fetchThreads();
-        const isCurrent = true; // Gateway always sends for current session
         const activeAgentName = isChannelSession(activeSessionRef.current) ? "Woods" : getAgentBySessionKey(activeSessionRef.current).name;
         const bubble = chatMessageToBubble(msg, activeAgentName);
 
@@ -618,6 +622,7 @@ export default function ChatPage() {
             onOpenSettings={() => setShowChannelSettings(true)}
             onToggleCanvas={() => setShowCanvas(!showCanvas)}
             canvasOpen={showCanvas}
+            onMobileMenu={() => setMobileSidebarOpen(true)}
           />
         ) : (
           <div
@@ -721,6 +726,12 @@ export default function ChatPage() {
                 replies={activeThread.replies}
                 onBack={() => setActiveThreadIndex(null)}
                 a2aThreads={threads}
+                reactions={reactions}
+                sessionKey={activeSessionKey}
+                onReact={handleReact}
+                onEdit={handleEditMessage}
+                onDelete={handleDeleteMessage}
+                onReply={(id, sender, preview) => setReplyTo({ messageId: id, sender, preview })}
               />
             );
           })()
@@ -789,6 +800,7 @@ export default function ChatPage() {
       <style>{`
         @media (max-width: 768px) {
           .chat-sidebar-desktop-wrapper { display: none; }
+          .chat-sidebar-desktop { display: none; }
           .mobile-hamburger { display: flex !important; }
           .message-content { font-size: 13px !important; }
         }

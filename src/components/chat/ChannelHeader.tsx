@@ -1,6 +1,6 @@
 "use client";
 
-import { Hash, Users, Settings, Wifi, WifiOff, FileText } from "lucide-react";
+import { Hash, Users, Settings, Wifi, WifiOff, FileText, Menu } from "lucide-react";
 import type { Channel } from "@/types/channel";
 
 interface ChannelHeaderProps {
@@ -9,6 +9,7 @@ interface ChannelHeaderProps {
   onOpenSettings: () => void;
   onToggleCanvas: () => void;
   canvasOpen: boolean;
+  onMobileMenu?: () => void;
 }
 
 export function ChannelHeader({
@@ -17,6 +18,7 @@ export function ChannelHeader({
   onOpenSettings,
   onToggleCanvas,
   canvasOpen,
+  onMobileMenu,
 }: ChannelHeaderProps) {
   const isDisconnected =
     connectionStatus === "disconnected" || connectionStatus === "error";
@@ -33,6 +35,25 @@ export function ChannelHeader({
       }}
     >
       <div style={{ display: "flex", alignItems: "center", gap: "10px" }}>
+        {/* Mobile hamburger */}
+        {onMobileMenu && (
+          <button
+            onClick={onMobileMenu}
+            className="mobile-hamburger"
+            style={{
+              background: "none",
+              border: "none",
+              cursor: "pointer",
+              color: "var(--text-muted)",
+              padding: "4px",
+              borderRadius: "4px",
+              display: "none",
+              alignItems: "center",
+            }}
+          >
+            <Menu style={{ width: 20, height: 20 }} />
+          </button>
+        )}
         <div
           style={{
             width: "32px",
