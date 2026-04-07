@@ -25,6 +25,19 @@ interface UsageRecord {
   cacheWrite: number;
   totalTokens: number;
   cost: number;
+  purpose: string;
+}
+
+function classifyPurpose(userText: string): string {
+  if (!userText) return "unknown";
+  if (userText.includes("HEARTBEAT")) return "heartbeat";
+  if (userText.includes("new session was started")) return "session-start";
+  if (userText.includes("telegram")) return "telegram";
+  if (userText.includes("discord")) return "discord";
+  if (userText.includes("imessage") || userText.includes("iMessage")) return "imessage";
+  if (userText.includes("openclaw-control-ui")) return "control-ui";
+  if (userText.includes("cron") || userText.includes("scheduled")) return "cron";
+  return "user-message";
 }
 
 // Parse all session JSONL files for usage data.
@@ -48,13 +61,13 @@ function parseAllUsage(daysBack: number): UsageRecord[] {
     const sessionsDir = join(agentsDir, agentId, "sessions");
     let files: string[];
     try {
-      files = readdirSync(sessionsDir).filter((f) => f.endsWith(".jsonl"));
+      files = readdirSync(sessionsDir).filter((f) => f.includes(".jsonl"));
     } catch {
       continue;
     }
 
     for (const file of files) {
-      const sessionId = file.replace(".jsonl", "").replace(/\.reset\..*$/, "");
+      const sessionId = file.replace(/\.jsonl.*$/, "");
       const filePath = join(sessionsDir, file);
 
       let content: string;
@@ -65,6 +78,7 @@ function parseAllUsage(daysBack: number): UsageRecord[] {
       }
 
       const lines = content.split("\n");
+      let lastUserText = "";
       for (const line of lines) {
         if (!line.trim()) continue;
         try {
@@ -72,10 +86,27 @@ function parseAllUsage(daysBack: number): UsageRecord[] {
           if (data.type !== "message") continue;
 
           const msg = data.message;
-          if (msg?.role !== "assistant") continue;
+          if (!msg) continue;
+
+          // Track user messages for purpose classification
+          if (msg.role === "user") {
+            const c = msg.content;
+            if (typeof c === "string") {
+              lastUserText = c.slice(0, 300);
+            } else if (Array.isArray(c) && c.length > 0 && c[0].text) {
+              lastUserText = c[0].text.slice(0, 300);
+            }
+            continue;
+          }
+
+          if (msg.role !== "assistant") continue;
 
           const usage = msg.usage;
           if (!usage || !usage.cost) continue;
+
+          // Skip internal OpenClaw messages (no real API cost)
+          const model = msg.model || "unknown";
+          if (model === "delivery-mirror" || model === "gateway-injected") continue;
 
           const ts = data.timestamp
             ? new Date(data.timestamp).getTime()
@@ -88,7 +119,7 @@ function parseAllUsage(daysBack: number): UsageRecord[] {
           records.push({
             agentId,
             sessionId,
-            model: msg.model || "unknown",
+            model,
             timestamp: ts,
             date: dateStr,
             input: usage.input || 0,
@@ -97,6 +128,7 @@ function parseAllUsage(daysBack: number): UsageRecord[] {
             cacheWrite: usage.cacheWrite || 0,
             totalTokens: usage.totalTokens || 0,
             cost: usage.cost.total || 0,
+            purpose: classifyPurpose(lastUserText),
           });
         } catch {
           // Skip unparseable lines
@@ -116,6 +148,8 @@ export async function GET(request: NextRequest) {
   const searchParams = request.nextUrl.searchParams;
   const timeframe = searchParams.get("timeframe") || "30d";
   const days = parseInt(timeframe.replace(/\D/g, ""), 10) || 30;
+  const logPage = parseInt(searchParams.get("logPage") || "1", 10);
+  const logLimit = Math.min(parseInt(searchParams.get("logLimit") || "100", 10), 500);
 
   try {
     const records = parseAllUsage(days);
@@ -228,6 +262,26 @@ export async function GET(request: NextRequest) {
       .sort((a, b) => new Date(b.lastActivity).getTime() - new Date(a.lastActivity).getTime())
       .slice(0, 50);
 
+    // API Call Log — paginated, sorted newest first
+    const sortedRecords = [...records].sort((a, b) => b.timestamp - a.timestamp);
+    const logStart = (logPage - 1) * logLimit;
+    const logSlice = sortedRecords.slice(logStart, logStart + logLimit);
+    const logs = logSlice.map((r) => ({
+      timestamp: new Date(r.timestamp).toISOString(),
+      agent: getAgentMeta(r.agentId).name,
+      agentId: r.agentId,
+      agentEmoji: getAgentMeta(r.agentId).emoji,
+      model: r.model,
+      inputTokens: r.input,
+      outputTokens: r.output,
+      cacheRead: r.cacheRead,
+      cacheWrite: r.cacheWrite,
+      totalTokens: r.totalTokens,
+      cost: Math.round(r.cost * 100000) / 100000,
+      purpose: r.purpose,
+      sessionId: r.sessionId,
+    }));
+
     return NextResponse.json({
       today: Math.round(today * 100) / 100,
       yesterday: Math.round(yesterday * 100) / 100,
@@ -241,6 +295,10 @@ export async function GET(request: NextRequest) {
       byModel,
       daily,
       sessions,
+      logs,
+      logTotal: records.length,
+      logPage,
+      logLimit,
     });
   } catch (error) {
     console.error("Error fetching cost data:", error);
